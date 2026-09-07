@@ -17,3 +17,5 @@ media/profile_pictures/*
 .vscode/
 .idea/
 .DS_Store
+
+*.sql
