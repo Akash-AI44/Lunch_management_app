@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: lunch_user
+      POSTGRES_PASSWORD: lunch_pass
+      POSTGRES_DB: lunch_management_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432" # optional: lets you connect from a DB tool on your host
+
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # This overrides whatever DATABASE_URL is in .env, because inside
+      # Docker the database is reachable at the service name "db", not localhost
+      DATABASE_URL: postgresql://lunch_user:lunch_pass@db:5432/lunch_management_db
+    volumes:
+      - ./app:/code/app # live-reload your code during development
+      - ./alembic:/code/alembic # new migration files show up without rebuilding
+      - media_data:/code/media # persist uploaded profile pictures
+    depends_on:
+      - db
+    command: [ "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload" ]
+
+volumes:
+  postgres_data:
+  media_data:

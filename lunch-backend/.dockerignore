@@ -1,0 +1,17 @@
+# Local virtualenv - never bake a host venv into the image
+.venv/
+
+# Version control
+.git/
+.gitignore
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Secrets - passed as env vars / docker-compose environment instead
+.env
+.env.example
+
+# Runtime data - mounted as a volume instead of baked into the image
+media/

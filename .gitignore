@@ -1,0 +1,10 @@
+# Catch-all safety net at the repo root — the subfolders
+# (lunch-backend/, lunch-frontend/) have their own .gitignore
+# files too, which still apply independently.
+
+# Google OAuth client secret files (if ever placed here by mistake)
+client_secret_*.json
+
+# OS junk
+.DS_Store
+Thumbs.db
