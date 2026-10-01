@@ -1,5 +1,3 @@
-"""Pydantic schemas — the API's request/response shapes. Part of the
-model layer: these describe data, they don't contain business rules."""
 from datetime import date, datetime
 from typing import Optional
 
@@ -61,6 +59,7 @@ class UserOut(BaseModel):
     profile_picture_url: Optional[str] = None
     phone_number: Optional[str] = None
     created_at: datetime
+    telegram_chat_id: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -72,6 +71,7 @@ class TodayStatusOut(BaseModel):
     date: date
     day_type: str
     is_having_lunch: Optional[bool]
+    reason: Optional[str] = None
     locked: bool
     cutoff_time: str
     message: Optional[str] = None
@@ -79,12 +79,14 @@ class TodayStatusOut(BaseModel):
 
 class ToggleLunchRequest(BaseModel):
     is_having_lunch: bool
+    reason: Optional[str] = None
 
 
 class HistoryEntryOut(BaseModel):
     date: date
     day_type: str
     is_having_lunch: Optional[bool]
+    reason: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -96,13 +98,46 @@ class MonthlySummaryOut(BaseModel):
     total_skipped: int
 
 
+class LeaveRequest(BaseModel):
+    start_date: date
+    end_date: date
+    reason: str = Field(min_length=1, max_length=255)
+
+
+class LeaveDayOut(BaseModel):
+    date: date
+    day_type: str
+    is_having_lunch: bool
+    reason: Optional[str] = None
+
+
+class LeaveResponse(BaseModel):
+    updated_days: list[LeaveDayOut]
+
+
+class UpcomingLeaveDayOut(BaseModel):
+    date: date
+    day_type: str
+    reason: Optional[str] = None
+
+
+class UpdateTelegramRequest(BaseModel):
+    telegram_chat_id: str
+
+
 # ---------- Admin ----------
+
+class SkippedDetail(BaseModel):
+    name: str
+    reason: Optional[str] = None
+
 
 class DailyCountOut(BaseModel):
     date: date
     day_type: str
     total_having_lunch: int
     names: list[str]
+    skipped: list[SkippedDetail] = []
 
 
 class EmployeeMonthlyTotal(BaseModel):
@@ -133,6 +168,7 @@ class DayDrilldownOut(BaseModel):
     date: date
     day_type: str
     names: list[str]
+    skipped: list[SkippedDetail] = []
 
 
 class ActivateRejectResponse(BaseModel):
@@ -149,3 +185,7 @@ class CutoffSettingsOut(BaseModel):
 class UpdateCutoffRequest(BaseModel):
     cutoff_hour: int = Field(ge=0, le=23)
     cutoff_minute: int = Field(ge=0, le=59)
+
+
+class BroadcastRequest(BaseModel):
+    message: str

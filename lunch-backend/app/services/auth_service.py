@@ -130,3 +130,10 @@ def issue_token(user: User) -> dict:
         "role": user.role.value,
         "status": user.status.value,
     }
+
+
+def update_telegram_chat_id(db: Session, user: User, telegram_chat_id: str) -> User:
+    user.telegram_chat_id = telegram_chat_id
+    db.commit()
+    db.refresh(user)
+    return user

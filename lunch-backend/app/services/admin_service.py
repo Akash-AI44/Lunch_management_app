@@ -13,6 +13,7 @@ from app.services import settings_service
 from app.services.employee_service import get_or_create_lunch_status
 from app.services.exceptions import InvalidMonthFormatError, UserNotFoundError, UserNotPendingError
 from app.services.lunch_rules import cutoff_label, get_day_type, parse_month, today_local
+from app.services import notification_service
 
 __all__ = [
     "list_pending_users",
@@ -73,7 +74,7 @@ def get_daily_count(db: Session, on: date_cls | None) -> dict:
     day_type = get_day_type(target_date)
 
     if day_type == "weekend":
-        return {"date": target_date, "day_type": day_type, "total_having_lunch": 0, "names": []}
+        return {"date": target_date, "day_type": day_type, "total_having_lunch": 0, "names": [], "skipped": []}
 
     employees = list_active_employees(db)
     for e in employees:
@@ -81,8 +82,13 @@ def get_daily_count(db: Session, on: date_cls | None) -> dict:
 
     rows = db.query(LunchStatus).filter(LunchStatus.date == target_date).all()
     having_lunch_ids = {r.user_id for r in rows if r.is_having_lunch}
+    skipped_dict = {r.user_id: r.reason for r in rows if not r.is_having_lunch}
+
     names = sorted(e.name for e in employees if e.id in having_lunch_ids)
-    return {"date": target_date, "day_type": day_type, "total_having_lunch": len(names), "names": names}
+    skipped_details = [{"name": e.name, "reason": skipped_dict.get(
+        e.id)} for e in employees if e.id in skipped_dict]
+
+    return {"date": target_date, "day_type": day_type, "total_having_lunch": len(names), "names": names, "skipped": skipped_details}
 
 
 def get_monthly_totals(db: Session, month: str) -> dict:
@@ -133,13 +139,18 @@ def get_monthly_history(db: Session, month: str) -> dict:
 def get_day_drilldown(db: Session, on: date_cls) -> dict:
     day_type = get_day_type(on)
     if day_type == "weekend":
-        return {"date": on, "day_type": day_type, "names": []}
+        return {"date": on, "day_type": day_type, "names": [], "skipped": []}
 
+    employees = list_active_employees(db)
     rows = db.query(LunchStatus).filter(LunchStatus.date == on).all()
     having_lunch_ids = {r.user_id for r in rows if r.is_having_lunch}
-    names = sorted(e.name for e in list_active_employees(db)
-                   if e.id in having_lunch_ids)
-    return {"date": on, "day_type": day_type, "names": names}
+    skipped_dict = {r.user_id: r.reason for r in rows if not r.is_having_lunch}
+
+    names = sorted(e.name for e in employees if e.id in having_lunch_ids)
+    skipped_details = [{"name": e.name, "reason": skipped_dict.get(
+        e.id)} for e in employees if e.id in skipped_dict]
+
+    return {"date": on, "day_type": day_type, "names": names, "skipped": skipped_details}
 
 
 def export_daily_csv(db: Session, on: date_cls | None) -> tuple[str, str]:
@@ -149,13 +160,16 @@ def export_daily_csv(db: Session, on: date_cls | None) -> tuple[str, str]:
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["Name", "Email", "Having Lunch"])
+    writer.writerow(["Name", "Email", "Having Lunch", "Reason"])
 
     if day_type != "weekend":
         for e in list_active_employees(db):
             row = get_or_create_lunch_status(db, e.id, target_date)
             if row and row.is_having_lunch:
-                writer.writerow([e.name, e.email, "Yes"])
+                writer.writerow([e.name, e.email, "Yes", ""])
+            elif row and not row.is_having_lunch:
+                writer.writerow(
+                    [e.name, e.email, "No", row.reason or "No reason provided"])
 
     return f"lunch-list-{target_date.isoformat()}.csv", buffer.getvalue()
 
@@ -168,4 +182,16 @@ def get_cutoff_settings(db: Session) -> dict:
 def update_cutoff_settings(db: Session, cutoff_hour: int, cutoff_minute: int) -> dict:
     cutoff_hour, cutoff_minute = settings_service.update_cutoff(
         db, cutoff_hour, cutoff_minute)
-    return {"cutoff_hour": cutoff_hour, "cutoff_minute": cutoff_minute, "cutoff_label": cutoff_label(cutoff_hour, cutoff_minute)}
+    label = cutoff_label(cutoff_hour, cutoff_minute)
+
+    notification_service.notify_all_via_telegram(
+        db,
+        message=f"Lunch cutoff time has been changed to {label}. Please update your status before then.",
+    )
+
+    return {"cutoff_hour": cutoff_hour, "cutoff_minute": cutoff_minute, "cutoff_label": label}
+
+
+def broadcast_message(db: Session, message: str) -> dict:
+    notification_service.notify_all_via_telegram(db, message)
+    return {"detail": "Message sent."}

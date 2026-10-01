@@ -68,3 +68,11 @@ class IncorrectPasswordError(ServiceError):
 
 class InternalStateError(ServiceError):
     status_code = 500
+
+
+class InvalidDateRangeError(ServiceError):
+    status_code = 400
+
+
+class NotOnLeaveError(ServiceError):
+    status_code = 400

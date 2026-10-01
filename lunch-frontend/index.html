@@ -222,16 +222,63 @@
 
                 <button id="today-toggle" class="plate-toggle" type="button" aria-pressed="false">
                     <span class="plate-toggle-track">
-                        <span class="plate-toggle-thumb">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6" />
-                                <circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.6" />
-                            </svg>
-                        </span>
+                        <span class="plate-toggle-thumb"></span>
                     </span>
                 </button>
 
+                <div id="reason-container" hidden style="margin-top: 20px;">
+                    <label class="field" style="text-align: left;">
+                        <span>Why are you skipping lunch? <span style="color:red;">*</span></span>
+                        <select id="skip-reason" class="month-input" style="width: 100%; margin-bottom: 10px;" required>
+                            <option value="">Select a reason...</option>
+                            <option value="Work from home">Work from home</option>
+                            <option value="I have taken break today">I have taken break today</option>
+                            <option value="I will come office after lunch">I will come office after lunch</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </label>
+                    <div style="display: flex; gap: 10px; justify-content: center;">
+                        <button id="btn-confirm-skip" class="btn btn-primary btn-sm">Confirm Cancel</button>
+                        <button id="btn-cancel-skip" class="btn btn-secondary btn-sm">Keep Lunch</button>
+                    </div>
+                </div>
+
                 <p class="lunch-card-note" id="today-note"></p>
+            </div>
+
+            <div class="settings-form leave-card">
+                <h2>Multi-day leave</h2>
+                <p class="cutoff-settings-note">Skip lunch for a range of days in one go — weekends in the range are
+                    skipped automatically.</p>
+                <div class="cutoff-settings-row" style="flex-wrap: wrap; gap: 12px;">
+                    <label class="field" style="flex: 1; min-width: 140px;">
+                        <span>From</span>
+                        <input type="date" id="leave-start" class="month-input" />
+                    </label>
+                    <label class="field" style="flex: 1; min-width: 140px;">
+                        <span>To</span>
+                        <input type="date" id="leave-end" class="month-input" />
+                    </label>
+                    <label class="field" style="flex: 1; min-width: 180px;">
+                        <span>Reason</span>
+                        <select id="leave-reason" class="month-input">
+                            <option value="">Select a reason...</option>
+                            <option value="Work from home">Work from home</option>
+                            <option value="On leave">On leave</option>
+                            <option value="I will come office after lunch">I will come office after lunch</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </label>
+                </div>
+                <button id="btn-apply-leave" class="btn btn-primary btn-sm" style="margin-top: 14px;">Apply
+                    leave</button>
+                <p class="cutoff-settings-note" id="leave-result-note" hidden style="margin-top: 10px;"></p>
+            </div>
+
+            <div class="settings-form leave-card" style="margin-top: 20px;">
+                <h2>Upcoming leave</h2>
+                <ul id="upcoming-leave-list" class="row-list row-list-plain"></ul>
+                <p class="cutoff-settings-note" id="upcoming-leave-empty" hidden>No upcoming leave.</p>
             </div>
 
             <div class="stat-row">
@@ -281,6 +328,22 @@
                 <p id="profile-role" class="profile-role"></p>
             </div>
 
+            <div class="settings-form">
+                <h2>Connect Telegram</h2>
+                <p class="cutoff-settings-note">
+                    Get lunch notifications on Telegram: 1) search <strong>@ajentica_lunch_bot</strong> in Telegram and
+                    send
+                    <code>/start</code>. 2) search <strong>@userinfobot</strong> and send <code>/start</code> — it
+                    replies with
+                    your numeric ID. 3) paste that number below.
+                </p>
+                <div class="cutoff-settings-row">
+                    <input type="text" id="telegram-chat-id-input" class="month-input" placeholder="e.g. 1183504069" />
+                    <button id="btn-save-telegram" class="btn btn-secondary btn-sm">Save</button>
+                </div>
+                <p class="cutoff-settings-note" id="telegram-save-note" hidden></p>
+            </div>
+
             <form id="form-change-password" class="settings-form">
                 <h2>Change password</h2>
                 <label class="field">
@@ -323,6 +386,10 @@
             <ul id="admin-daily-names" class="row-list row-list-plain"></ul>
             <p id="admin-daily-empty" class="empty-note" hidden>No one has opted in for this day yet.</p>
 
+            <h2 class="section-title" style="margin-top: 30px;">Who's Out (Skipped)</h2>
+            <ul id="admin-skipped-names" class="row-list row-list-plain"></ul>
+            <p id="admin-skipped-empty" class="empty-note" hidden>No one has skipped lunch yet.</p>
+
             <div class="settings-form cutoff-settings">
                 <h2>Lunch cutoff time</h2>
                 <p class="cutoff-settings-note">Employees can update their status up to this time each day. Raising it
@@ -331,6 +398,18 @@
                     <input type="time" id="cutoff-time-input" />
                     <button id="btn-update-cutoff" class="btn btn-secondary btn-sm">Update cutoff</button>
                 </div>
+            </div>
+
+            <div class="settings-form cutoff-settings" style="margin-top: 20px;">
+                <h2>Send announcement</h2>
+                <p class="cutoff-settings-note">This message goes out immediately to everyone who has connected
+                    Telegram.</p>
+                <textarea id="broadcast-message-input" class="month-input" rows="3"
+                    style="width: 100%; resize: vertical;"
+                    placeholder="e.g. No lunch service tomorrow — kitchen closed for maintenance."></textarea>
+                <button id="btn-send-broadcast" class="btn btn-primary btn-sm" style="margin-top: 10px;">Send to all
+                    users</button>
+                <p class="cutoff-settings-note" id="broadcast-result-note" hidden style="margin-top: 10px;"></p>
             </div>
         </section>
 

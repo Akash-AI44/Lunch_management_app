@@ -1,10 +1,7 @@
-"""Business logic for an employee's own lunch status, history, and
-profile. No FastAPI imports — file uploads are accepted as raw
-(filename, content_type, content) rather than UploadFile, so this stays
-testable without the web framework."""
 import os
 import uuid
 from datetime import date as date_cls
+from datetime import timedelta
 
 from sqlalchemy import extract
 from sqlalchemy.orm import Session
@@ -12,8 +9,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.orm import LunchStatus, User
 from app.services import settings_service
-from app.services.exceptions import CutoffPassedError, InternalStateError, InvalidImageTypeError, InvalidMonthFormatError, NoLunchFeatureError
+from app.services.exceptions import CutoffPassedError, InternalStateError, InvalidDateRangeError, InvalidImageTypeError, InvalidMonthFormatError, NoLunchFeatureError, NotOnLeaveError
 from app.services.lunch_rules import cutoff_label, default_lunch_value, get_day_type, is_past_cutoff, parse_month, today_local
+from app.services.exceptions import ServiceError
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
@@ -73,12 +71,15 @@ def get_today_status(db: Session, user: User) -> dict:
         raise InternalStateError("Could not resolve today's lunch status.")
     return {
         "date": today, "day_type": row.day_type, "is_having_lunch": row.is_having_lunch,
+        "reason": row.reason,
         "locked": is_past_cutoff(today, cutoff_hour, cutoff_minute),
         "cutoff_time": cutoff_label(cutoff_hour, cutoff_minute), "message": None,
     }
 
 
-def update_today_status(db: Session, user: User, is_having_lunch: bool) -> dict:
+def update_today_status(
+    db: Session, user: User, is_having_lunch: bool, reason: str | None = None
+) -> dict:
     today = today_local()
     day_type = get_day_type(today)
     cutoff_hour, cutoff_minute = settings_service.get_cutoff(db)
@@ -89,17 +90,111 @@ def update_today_status(db: Session, user: User, is_having_lunch: bool) -> dict:
         raise CutoffPassedError(
             f"The {cutoff_label(cutoff_hour, cutoff_minute)} cutoff has passed — today's status is locked.")
 
+    if not is_having_lunch and not reason:
+        raise ServiceError("You have to tell the reason!")
+
     row = get_or_create_lunch_status(db, user.id, today)
     if row is None:
         raise InternalStateError("Could not resolve today's lunch status.")
 
     row.is_having_lunch = is_having_lunch
+    row.reason = reason if not is_having_lunch else None
     db.commit()
     db.refresh(row)
     return {
         "date": today, "day_type": row.day_type, "is_having_lunch": row.is_having_lunch,
+        "reason": row.reason,
         "locked": False, "cutoff_time": cutoff_label(cutoff_hour, cutoff_minute), "message": None,
     }
+
+
+def apply_leave(
+    db: Session, user: User, start_date: date_cls, end_date: date_cls, reason: str
+) -> list[LunchStatus]:
+    today = today_local()
+
+    if end_date < start_date:
+        raise InvalidDateRangeError("end_date cannot be before start_date.")
+    if start_date < today:
+        raise InvalidDateRangeError("Leave cannot be applied to a past date.")
+    if not reason:
+        raise ServiceError("You have to tell the reason!")
+
+    # Only today's cutoff matters — future days aren't locked yet, no
+    # matter what the current cutoff setting is.
+    if start_date == today:
+        cutoff_hour, cutoff_minute = settings_service.get_cutoff(db)
+        if is_past_cutoff(today, cutoff_hour, cutoff_minute):
+            raise CutoffPassedError(
+                f"The {cutoff_label(cutoff_hour, cutoff_minute)} cutoff has passed — "
+                "today can't be included in a new leave request."
+            )
+
+    updated: list[LunchStatus] = []
+    current = start_date
+    while current <= end_date:
+        day_type = get_day_type(current)
+        if day_type != "weekend":
+            row = get_or_create_lunch_status(db, user.id, current)
+            if row is None:
+                raise InternalStateError(
+                    f"Could not resolve lunch status for {current}.")
+            row.is_having_lunch = False
+            row.reason = reason
+            updated.append(row)
+        current += timedelta(days=1)
+
+    db.commit()
+    for row in updated:
+        db.refresh(row)
+
+    return updated
+
+
+def get_upcoming_leave(db: Session, user: User) -> list[LunchStatus]:
+    today = today_local()
+    return (
+        db.query(LunchStatus)
+        .filter(
+            LunchStatus.user_id == user.id,
+            LunchStatus.date >= today,
+            LunchStatus.is_having_lunch == False,  # noqa: E712
+        )
+        .order_by(LunchStatus.date)
+        .all()
+    )
+
+
+def cancel_leave_day(db: Session, user: User, target_date: date_cls) -> LunchStatus:
+    today = today_local()
+
+    if target_date < today:
+        raise InvalidDateRangeError("Can't cancel leave for a past date.")
+
+    if target_date == today:
+        cutoff_hour, cutoff_minute = settings_service.get_cutoff(db)
+        if is_past_cutoff(today, cutoff_hour, cutoff_minute):
+            raise CutoffPassedError(
+                f"The {cutoff_label(cutoff_hour, cutoff_minute)} cutoff has passed — "
+                "today's leave can't be cancelled anymore."
+            )
+
+    row = (
+        db.query(LunchStatus)
+        .filter(LunchStatus.user_id == user.id, LunchStatus.date == target_date)
+        .first()
+    )
+    if row is None or row.is_having_lunch:
+        raise NotOnLeaveError("This day isn't marked as leave.")
+
+    default_value = default_lunch_value(row.day_type)
+    if default_value is None:
+        raise InternalStateError("Could not resolve the default lunch status.")
+    row.is_having_lunch = default_value
+    row.reason = None
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 def get_history(db: Session, user: User, month: str) -> list[LunchStatus]:

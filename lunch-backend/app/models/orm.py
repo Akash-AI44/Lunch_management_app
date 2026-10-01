@@ -46,6 +46,8 @@ class User(Base):
     lunch_statuses: Mapped[list["LunchStatus"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    telegram_chat_id: Mapped[str | None] = mapped_column(
+        String(50), nullable=True)
 
 
 class LunchStatus(Base):
@@ -57,6 +59,7 @@ class LunchStatus(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     date: Mapped[dt.date] = mapped_column(Date, index=True)
     is_having_lunch: Mapped[bool]
+    reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     day_type: Mapped[str] = mapped_column(String(20))  # normal | friday
     locked_at: Mapped[dt.datetime | None] = mapped_column(
         DateTime(timezone=True))

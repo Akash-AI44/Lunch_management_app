@@ -38,6 +38,7 @@ async function boot() {
     wirePendingScreen();
     wireNav();
     wireEmployeeToday();
+    wireLeaveForm();
     wireHistory();
     wireProfile();
     wireAdminPending();
@@ -76,6 +77,7 @@ async function routeAfterAuth() {
         showTab("today");
         await loadEmployeeToday();
         await loadEmployeeSummary();
+        await loadUpcomingLeave();
     }
 }
 
@@ -261,18 +263,111 @@ async function onTabSelected(tab) {
 // Employee: Today
 // ---------------------------------------------------------------------
 function wireEmployeeToday() {
-    document.getElementById("today-toggle").addEventListener("click", async () => {
-        const btn = document.getElementById("today-toggle");
-        const currentlyOn = btn.getAttribute("aria-pressed") === "true";
-        btn.disabled = true;
+    const toggleBtn = document.getElementById("today-toggle");
+    const reasonContainer = document.getElementById("reason-container");
+    const skipReasonSelect = document.getElementById("skip-reason");
+
+    toggleBtn.addEventListener("click", async () => {
+        const currentlyOn = toggleBtn.getAttribute("aria-pressed") === "true";
+
+        if (currentlyOn) {
+            // লাঞ্চ ক্যান্সেল করতে চাইলে রিজন বক্স দেখাবে
+            reasonContainer.hidden = false;
+            toggleBtn.hidden = true;
+            document.getElementById("today-note").hidden = true;
+        } else {
+            // লাঞ্চ অন করতে চাইলে সরাসরি API কল হবে
+            toggleBtn.disabled = true;
+            try {
+                const status = await employeeApi.updateToday(true);
+                renderTodayStatus(status);
+                await loadEmployeeSummary();
+                await loadUpcomingLeave();
+            } catch (err) {
+                showError(err);
+            } finally {
+                toggleBtn.disabled = false;
+            }
+        }
+    });
+
+    // Keep Lunch বাটনে ক্লিক করলে আগের অবস্থায় ফিরবে
+    document.getElementById("btn-cancel-skip").addEventListener("click", () => {
+        reasonContainer.hidden = true;
+        toggleBtn.hidden = false;
+        document.getElementById("today-note").hidden = false;
+        skipReasonSelect.value = "";
+    });
+
+    // Confirm Cancel বাটনে ক্লিক করলে API এ ডেটা পাঠাবে
+    document.getElementById("btn-confirm-skip").addEventListener("click", async () => {
+        const reason = skipReasonSelect.value;
+        if (!reason) {
+            showToast("Please select a reason for skipping lunch.", "error");
+            return;
+        }
+
+        const btn = document.getElementById("btn-confirm-skip");
+        setButtonLoading(btn, true, "Updating...");
         try {
-            const status = await employeeApi.updateToday(!currentlyOn);
+            const status = await employeeApi.updateToday(false, reason);
+            reasonContainer.hidden = true;
+            toggleBtn.hidden = false;
+            document.getElementById("today-note").hidden = false;
+            skipReasonSelect.value = "";
             renderTodayStatus(status);
             await loadEmployeeSummary();
+            await loadUpcomingLeave();
         } catch (err) {
             showError(err);
         } finally {
-            btn.disabled = false;
+            setButtonLoading(btn, false);
+        }
+    });
+}
+
+function wireLeaveForm() {
+    const btn = document.getElementById("btn-apply-leave");
+    const startInput = document.getElementById("leave-start");
+    const endInput = document.getElementById("leave-end");
+    const reasonSelect = document.getElementById("leave-reason");
+    const note = document.getElementById("leave-result-note");
+
+    btn.addEventListener("click", async () => {
+        const start_date = startInput.value;
+        const end_date = endInput.value;
+        const reason = reasonSelect.value;
+
+        if (!start_date || !end_date) {
+            showToast("Pick both a start and end date.", "error");
+            return;
+        }
+        if (!reason) {
+            showToast("Please select a reason.", "error");
+            return;
+        }
+
+        setButtonLoading(btn, true, "Applying...");
+        try {
+            const result = await employeeApi.applyLeave(start_date, end_date, reason);
+            const days = result.updated_days || [];
+            note.hidden = false;
+            note.textContent = days.length
+                ? `Applied leave for ${days.length} day(s): ${days.map((d) => d.date).join(", ")}.`
+                : "No working days found in that range (all weekend?).";
+            startInput.value = "";
+            endInput.value = "";
+            reasonSelect.value = "";
+
+            // Today itself might have been part of the range — refresh its card.
+            const today = await employeeApi.today();
+            renderTodayStatus(today);
+            await loadEmployeeSummary();
+            await loadUpcomingLeave();
+        } catch (err) {
+            showError(err);
+        } finally {
+            setButtonLoading(btn, false);
         }
     });
 }
@@ -313,6 +408,8 @@ function renderTodayStatus(status) {
 
     if (status.locked) {
         note.textContent = `The ${status.cutoff_time} cutoff has passed — today is locked.`;
+    } else if (!isOn && status.reason) {
+        note.textContent = `Skipped reason: ${status.reason}. Toggle on before ${status.cutoff_time} to get lunch.`;
     } else if (status.day_type === "friday") {
         note.textContent = isOn
             ? `Coming in — checked in before ${status.cutoff_time}.`
@@ -333,6 +430,45 @@ async function loadEmployeeSummary() {
     }
 }
 
+async function loadUpcomingLeave() {
+    const list = document.getElementById("upcoming-leave-list");
+    const empty = document.getElementById("upcoming-leave-empty");
+    try {
+        const days = await employeeApi.getUpcomingLeave();
+        list.innerHTML = "";
+        empty.hidden = days.length > 0;
+        for (const day of days) {
+            const li = document.createElement("li");
+            li.innerHTML = `
+                <span>
+                    <span class="row-title">${formatShortDate(day.date)}</span><br>
+                    <span class="row-sub">${day.reason || "No reason"}</span>
+                </span>
+                <button class="btn btn-secondary btn-sm btn-cancel-leave-day" data-date="${day.date}">Cancel</button>
+            `;
+            list.appendChild(li);
+        }
+        list.querySelectorAll(".btn-cancel-leave-day").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+                setButtonLoading(btn, true, "Cancelling...");
+                try {
+                    await employeeApi.cancelLeaveDay(btn.dataset.date);
+                    showToast("Leave cancelled.", "success");
+                    await loadUpcomingLeave();
+                    const today = await employeeApi.today();
+                    renderTodayStatus(today);
+                    await loadEmployeeSummary();
+                } catch (err) {
+                    showError(err);
+                } finally {
+                    setButtonLoading(btn, false);
+                }
+            });
+        });
+    } catch (err) {
+        showError(err);
+    }
+}
 // ---------------------------------------------------------------------
 // Employee: History
 // ---------------------------------------------------------------------
@@ -355,7 +491,7 @@ async function loadHistory() {
             const isOn = !!row.is_having_lunch;
             li.innerHTML = `
         <span class="row-title">${formatShortDate(row.date)}</span>
-        <span class="row-status ${isOn ? "is-on" : "is-off"}">${isOn ? "Had lunch" : row.day_type === "friday" ? "WFH" : "Skipped"}</span>
+        <span class="row-status ${isOn ? "is-on" : "is-off"}">${isOn ? "Had lunch" : row.day_type === "friday" && !row.reason ? "WFH" : row.reason ? `Lunch off — ${row.reason}` : "Lunch off"}</span>
       `;
             list.appendChild(li);
         }
@@ -401,6 +537,31 @@ function wireProfile() {
             setButtonLoading(btn, false);
         }
     });
+
+    const telegramInput = document.getElementById("telegram-chat-id-input");
+    const telegramNote = document.getElementById("telegram-save-note");
+    if (currentUser?.telegram_chat_id) {
+        telegramInput.value = currentUser.telegram_chat_id;
+    }
+    document.getElementById("btn-save-telegram").addEventListener("click", async () => {
+        const chatId = telegramInput.value.trim();
+        if (!chatId) {
+            showToast("Enter your Telegram chat ID first.", "error");
+            return;
+        }
+        const btn = document.getElementById("btn-save-telegram");
+        setButtonLoading(btn, true, "Saving…");
+        try {
+            currentUser = await authApi.updateTelegram(chatId);
+            telegramNote.textContent = "Telegram connected — you'll now get lunch updates there.";
+            telegramNote.hidden = false;
+            showToast("Telegram connected.", "success");
+        } catch (err) {
+            showError(err);
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    });
 }
 
 function renderProfile() {
@@ -430,6 +591,29 @@ function wireAdminToday() {
     dateInput.addEventListener("change", loadAdminToday);
     document.getElementById("btn-export-csv").addEventListener("click", exportCsv);
     document.getElementById("btn-update-cutoff").addEventListener("click", updateCutoff);
+
+    const broadcastInput = document.getElementById("broadcast-message-input");
+    const broadcastNote = document.getElementById("broadcast-result-note");
+    document.getElementById("btn-send-broadcast").addEventListener("click", async () => {
+        const message = broadcastInput.value.trim();
+        if (!message) {
+            showToast("Write a message first.", "error");
+            return;
+        }
+        const btn = document.getElementById("btn-send-broadcast");
+        setButtonLoading(btn, true, "Sending…");
+        try {
+            await adminApi.broadcast(message);
+            broadcastNote.textContent = "Message sent.";
+            broadcastNote.hidden = false;
+            broadcastInput.value = "";
+            showToast("Announcement sent.", "success");
+        } catch (err) {
+            showError(err);
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    });
 }
 
 async function loadAdminToday() {
@@ -437,6 +621,7 @@ async function loadAdminToday() {
     document.getElementById("admin-today-date").textContent = formatFriendlyDate(on);
     try {
         const data = await adminApi.daily(on);
+
         document.getElementById("admin-daily-count").textContent = data.total_having_lunch;
         document.getElementById("admin-daily-label").textContent =
             data.day_type === "weekend" ? "Weekend — no lunch" : data.day_type === "friday" ? "Opted in (Friday)" : "Getting lunch";
@@ -450,6 +635,31 @@ async function loadAdminToday() {
             li.innerHTML = `<span class="row-title">${name}</span>`;
             list.appendChild(li);
         }
+
+        const skippedList = document.getElementById("admin-skipped-names");
+        const skippedEmpty = document.getElementById("admin-skipped-empty");
+
+        if (skippedList && skippedEmpty) {
+            skippedList.innerHTML = "";
+
+            if (data.skipped && data.skipped.length > 0) {
+                skippedEmpty.hidden = true;
+                for (const user of data.skipped) {
+                    const li = document.createElement("li");
+                    li.style.flexDirection = "column";
+                    li.style.alignItems = "flex-start";
+                    li.style.gap = "4px";
+                    li.innerHTML = `
+                        <span class="row-title">${user.name}</span>
+                        <span class="row-sub" style="color: var(--off); font-weight: 500;">Reason: ${user.reason || "No reason provided"}</span>
+                    `;
+                    skippedList.appendChild(li);
+                }
+            } else {
+                skippedEmpty.hidden = false;
+            }
+        }
+
     } catch (err) {
         showError(err);
     }

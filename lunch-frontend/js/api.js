@@ -66,15 +66,21 @@ export const authApi = {
     me: () => request("/auth/me"),
     changePassword: (current_password, new_password) =>
         request("/auth/change-password", { method: "POST", body: { current_password, new_password } }),
+    updateTelegram: (telegram_chat_id) =>
+        request("/auth/telegram", { method: "PATCH", body: { telegram_chat_id } }),
 };
 
 // ---------- Employee ----------
 export const employeeApi = {
     today: () => request("/employee/today"),
-    updateToday: (is_having_lunch) =>
-        request("/employee/today", { method: "PATCH", body: { is_having_lunch } }),
+    updateToday: (is_having_lunch, reason = null) =>
+        request("/employee/today", { method: "PATCH", body: { is_having_lunch, reason } }),
     history: (month) => request(`/employee/history?month=${month}`),
     summary: (month) => request(`/employee/summary?month=${month}`),
+    applyLeave: (start_date, end_date, reason) =>
+        request("/employee/leave", { method: "POST", body: { start_date, end_date, reason } }),
+    getUpcomingLeave: () => request("/employee/leave"),
+    cancelLeaveDay: (target_date) => request(`/employee/leave/${target_date}`, { method: "DELETE" }),
     uploadAvatar: (file) => {
         const form = new FormData();
         form.append("file", file);
@@ -95,6 +101,7 @@ export const adminApi = {
     getSettings: () => request("/admin/settings"),
     updateSettings: (cutoff_hour, cutoff_minute) =>
         request("/admin/settings", { method: "PATCH", body: { cutoff_hour, cutoff_minute } }),
+    broadcast: (message) => request("/admin/broadcast", { method: "POST", body: { message } }),
 };
 
 export { ApiError, API_BASE };

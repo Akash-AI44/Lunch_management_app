@@ -66,3 +66,12 @@ def get_settings(db: Session = Depends(get_db), current_user: User = Depends(req
 @router.patch("/settings", response_model=schemas.CutoffSettingsOut)
 def update_settings(payload: schemas.UpdateCutoffRequest, db: Session = Depends(get_db), current_user: User = Depends(require_superadmin)):
     return admin_service.update_cutoff_settings(db, payload.cutoff_hour, payload.cutoff_minute)
+
+
+@router.post("/broadcast")
+def broadcast(
+    payload: schemas.BroadcastRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_superadmin),
+):
+    return admin_service.broadcast_message(db, payload.message)

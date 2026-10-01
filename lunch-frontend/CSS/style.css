@@ -9,12 +9,12 @@
     --card: #ffffff;
     --border: #e3e0ec;
 
-    --accent: #6d4c9f;
+    --accent: #10b981;
     /* having lunch — from the wall panels, brightened for UI use */
-    --accent-soft: #efe8f7;
-    --off: #9c4a78;
+    --accent-soft: #d1fae5;
+    --off: #ef4444;
     /* skipped — from the backlit glow */
-    --off-soft: #faeaf2;
+    --off-soft: #fee2e2;
     --warn: #8a5a12;
     /* pending / friday opt-in — kept amber so all 3 states stay distinct */
     --warn-soft: #fbf0dc;
@@ -500,33 +500,33 @@ p {
 
 .plate-toggle-track {
     display: block;
-    width: 84px;
-    height: 84px;
-    border-radius: 50%;
-    background: var(--off-soft);
-    border: 2px solid var(--off);
+    width: 64px;
+    height: 34px;
+    border-radius: 34px;
+    background: var(--off);
     position: relative;
-    transition: background 0.2s ease, border-color 0.2s ease;
+    transition: background 0.3s ease;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .plate-toggle[aria-pressed="true"] .plate-toggle-track {
-    background: var(--accent-soft);
-    border-color: var(--accent);
+    background: var(--accent);
 }
 
 .plate-toggle-thumb {
     position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--off);
-    transition: color 0.2s ease, transform 0.2s ease;
+    top: 2px;
+    left: 2px;
+    width: 30px;
+    height: 30px;
+    background: #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
 }
 
 .plate-toggle[aria-pressed="true"] .plate-toggle-thumb {
-    color: var(--accent);
-    transform: scale(1.08);
+    transform: translateX(30px);
 }
 
 .plate-toggle-thumb svg {
@@ -731,6 +731,11 @@ p {
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     padding: 20px;
+}
+
+.leave-card {
+    margin-top: 28px;
+    margin-bottom: 28px;
 }
 
 .settings-form h2 {

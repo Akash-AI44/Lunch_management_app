@@ -32,6 +32,15 @@ def me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+@router.patch("/telegram", response_model=schemas.UserOut)
+def update_telegram(
+    payload: schemas.UpdateTelegramRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return auth_service.update_telegram_chat_id(db, current_user, payload.telegram_chat_id)
+
+
 @router.post("/change-password")
 def change_password(payload: schemas.ChangePasswordRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     auth_service.change_password(

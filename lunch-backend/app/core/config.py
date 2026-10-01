@@ -30,5 +30,7 @@ class Settings:
     SEED_ADMIN_EMAIL: str = os.getenv("SEED_ADMIN_EMAIL", "")
     SEED_ADMIN_PASSWORD: str = os.getenv("SEED_ADMIN_PASSWORD", "")
 
+    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+
 
 settings = Settings()
